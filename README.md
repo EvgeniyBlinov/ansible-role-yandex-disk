@@ -4,6 +4,8 @@
 
 ## Role variables
 
+[https://yandex.ru/support/disk/cli-clients.html](https://yandex.ru/support/disk/cli-clients.html)
+
 @see [defualts/main.yml](defaults/main.yml)
 
 ```sh
