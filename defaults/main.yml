@@ -1,0 +1,8 @@
+#  vim: set et fenc=utf-8 ff=unix sts=2 sw=2 ts=2 :
+---
+yd_config_path: "/root/.config/yandex-disk"
+yd_dir: "/root/Yandex.Disk"
+yd_user: root
+yd_group: root
+yd_iid: 000a0000-000a-0000-000a-0000a00aa0a0
+yd_passwd: 00a0a0000a0a0aa0a0000aa00000a0aa0000000a0a0000a0a0000aa000aa00aaaa0000000aa0aa

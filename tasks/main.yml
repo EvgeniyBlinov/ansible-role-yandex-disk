@@ -1,0 +1,54 @@
+#  vim: set et fenc=utf-8 ff=unix sts=2 sw=2 ts=2 :
+---
+- name: Synchronize yandex install files
+  synchronize:
+    src: "all/"
+    dest: "/"
+    archive: no
+    links: yes
+    perms: yes
+    recursive: yes
+    times: yes
+    checksum: yes
+  tags:
+    - synchronize_yandex_install_files
+
+- name: Check instelled yandex repo
+  stat: path=/etc/apt/sources.list.d/yandex.list
+  register: yandex_repo_list
+
+- name: Check instelled yandex-disk
+  command: dpkg-query -W yandex-disk
+  register: dpkg_check_yandex_disk
+  failed_when: dpkg_check_yandex_disk.rc > 1
+  changed_when: dpkg_check_yandex_disk.rc == 1
+
+- name: add yandex repo
+  shell: /bin/bash /root/.ansible/tmp/yandex/yandex_add_repo.sh
+  when: yandex_repo_list.stat.exists == False
+
+- name: install yandex-disk
+  shell: /bin/bash /root/.ansible/tmp/yandex/yandex_install.sh
+  when: dpkg_check_yandex_disk.rc == 1
+
+- name: make yandex config path
+  file: path={{ yd_config_path }} state=directory mode=0700 owner={{ yd_user }} group={{ yd_group }}
+  register: _yd_config_path
+
+- name: make yandex dir
+  file: path={{ yd_dir }} state=directory mode=0755 owner={{ yd_user }} group={{ yd_group }}
+  register: _yd_dir
+
+- name: configure yandex-disk
+  template: src="{{ item }}" dest="{{ yd_config_path }}/{{ item }}" owner={{ yd_user }} group={{ yd_group }}
+  when: _yd_config_path.state and _yd_dir.state
+  with_items:
+    - config.cfg
+    - iid
+    - passwd
+  tags:
+    - configure_yandex-disk
+
+- name: add yandex cron
+  cron: name="yandex-disk sync" minute="0" hour="5" job="/usr/bin/yandex-disk sync -c {{ yd_config_path }}/config.cfg > /dev/null"
+  when: _yd_config_path.state and _yd_dir.state
