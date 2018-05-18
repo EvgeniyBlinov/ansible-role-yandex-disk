@@ -1,54 +1,110 @@
 #  vim: set et fenc=utf-8 ff=unix sts=2 sw=2 ts=2 :
 ---
-- name: Synchronize yandex install files
-  synchronize:
-    src: "all/"
-    dest: "/"
-    archive: no
-    links: yes
-    perms: yes
-    recursive: yes
-    times: yes
-    checksum: yes
-  tags:
-    - synchronize_yandex_install_files
+- name: YD | Check installed yandex-disk
+  shell: which yandex-disk
+  failed_when: false
+  ignore_errors: yes
+  register: yd__r_installed
 
-- name: Check instelled yandex repo
-  stat: path=/etc/apt/sources.list.d/yandex.list
-  register: yandex_repo_list
+- block:
+  - name: YD | Add repo
+    copy:
+      dest: /etc/apt/sources.list.d/yandex.list
+      content: "deb http://repo.yandex.ru/yandex-disk/deb/ stable main"
 
-- name: Check instelled yandex-disk
-  command: dpkg-query -W yandex-disk
-  register: dpkg_check_yandex_disk
-  failed_when: dpkg_check_yandex_disk.rc > 1
-  changed_when: dpkg_check_yandex_disk.rc == 1
+  - name: YD | Add repo key
+    apt_key:
+      url: http://repo.yandex.ru/yandex-disk/YANDEX-DISK-KEY.GPG
+      state: present
+      keyring: /etc/apt/trusted.gpg.d/yandex-disk.gpg
+    register: yd__r_repo
 
-- name: add yandex repo
-  shell: /bin/bash /root/.ansible/tmp/yandex/yandex_add_repo.sh
-  when: yandex_repo_list.stat.exists == False
+  - name: YD | apt update
+    apt:
+      update_cache: yes
+    when: yd__r_repo is changed
 
-- name: install yandex-disk
-  shell: /bin/bash /root/.ansible/tmp/yandex/yandex_install.sh
-  when: dpkg_check_yandex_disk.rc == 1
+  - name: YD | Install yandex-disk
+    apt:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - yandex-disk
 
-- name: make yandex config path
-  file: path={{ yd_config_path }} state=directory mode=0700 owner={{ yd_user }} group={{ yd_group }}
-  register: _yd_config_path
+  when: yd__r_installed.rc > 0
 
-- name: make yandex dir
-  file: path={{ yd_dir }} state=directory mode=0755 owner={{ yd_user }} group={{ yd_group }}
-  register: _yd_dir
+  ########################################################################
 
-- name: configure yandex-disk
-  template: src="{{ item }}" dest="{{ yd_config_path }}/{{ item }}" owner={{ yd_user }} group={{ yd_group }}
-  when: _yd_config_path.state and _yd_dir.state
+- name: YD | Get user home path
+  shell: "echo ~{{ yd__user }}"
+  args:
+    executable: /bin/bash
+  register: yd__r_user_home
+
+- set_fact:
+    yd__user_home_dir: "{{ yd__r_user_home.stdout }}"
+
+- set_fact:
+    yd__config_path: "{{ yd__user_home_dir }}/.config/yandex-disk"
+    yd__log_path: "{{ yd__user_home_dir }}/.config/yandex-disk/logs"
+  when: yd__config_path is not defined
+
+- set_fact:
+    yd__dir: "{{ yd__user_home_dir }}/Yandex.Disk"
+  when: yd__dir is not defined
+
+- name: YD | Make yandex config path
+  file:
+    path: "{{ yd__config_path }}"
+    owner: "{{ yd__user }}"
+    group: "{{ yd__group }}"
+    state: directory
+    mode: 0700
+
+- name: YD | Make yandex dir
+  file:
+    path: "{{ item }}"
+    owner: "{{ yd__user }}"
+    group: "{{ yd__group }}"
+    state: directory
+    mode: 0755
+  with_items:
+    - "{{ yd__dir }}"
+    - "{{ yd__log_path }}"
+
+- name: YD | Configure yandex-disk
+  template:
+    src: "{{ item }}"
+    dest: "{{ yd__config_path }}/{{ item }}"
+    owner: "{{ yd__user }}"
+    group: "{{ yd__group }}"
   with_items:
     - config.cfg
     - iid
     - passwd
-  tags:
-    - configure_yandex-disk
 
-- name: add yandex cron
-  cron: name="yandex-disk sync" minute="0" hour="5" job="/usr/bin/yandex-disk sync -c {{ yd_config_path }}/config.cfg > /dev/null"
-  when: _yd_config_path.state and _yd_dir.state
+- name: YD | Configure yandex-disk service
+  template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+  with_items:
+    - yandex-disk.service
+
+- name: YD | Systemd daemon_reload
+  systemd: daemon_reload=yes
+
+- name: YD | Start service
+  systemd:
+    name: yandex-disk
+    state: started
+    daemon_reload: yes
+
+#- name: YD | add yandex cron
+  #cron:
+    #job: >
+      #/usr/bin/yandex-disk sync \
+        #-c {{ yd__config_path }}/config.cfg \
+        #> /dev/null
+    #name: "yandex-disk sync"
+    #minute: 0
+    #hour: 5

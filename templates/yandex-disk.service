@@ -1,0 +1,24 @@
+# Yandex-disk service
+#  {{ ansible_managed }}
+# =======================
+[Unit]
+Description=Yandex disk service
+After=network.target
+
+[Service]
+Type=simple
+User={{ yd__user }}
+Group={{ yd__group }}
+# low priority to OOM killer
+OOMScoreAdjust=-100
+TimeoutSec=600
+Restart=on-failure
+PIDFile=/var/run/yandex-disk.pid
+
+#EnvironmentFile=/etc/default/yandex-disk
+#ExecStart=/usr/bin/yandex-disk start
+ExecStart=/usr/bin/yandex-disk --dir="{{ yd__dir }}" --auth="{{ yd__config_path }}/passwd" --tag="1 8 9 12 15 16 19" --proxy="no" --no-daemon="true"
+ExecStop=/usr/bin/yandex-disk stop
+
+[Install]
+WantedBy=multi-user.target
